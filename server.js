@@ -11,12 +11,21 @@ app.get('/data/users',function (req, res){
     res.status(200).send((Math.random()*10).toString());
 });
 
+var times = 0;
+var time_max = 20;
 app.get('/data/events',function (req, res){
     var data = {
         'event#1': (Math.random() * 14),
         'event#2': (Math.random() * 10),
         'event#3': (Math.random() * 19)
     };
+
+    times += 1;
+    if (times === time_max) {
+    	times = 0;
+    	data['event#4'] = (Math.random() * 23);
+    }
+
     res.json(data);
 });
 

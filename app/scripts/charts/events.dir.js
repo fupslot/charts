@@ -1,6 +1,24 @@
 (function (angular, Highcharts, _) {
     'use strict';
 
+    function ChartTrend (series, trendPointMax) {
+        this.name = series.name;
+        this._series = series;
+        this._emptyPoints = 0;
+        this._trendPointMax = trendPointMax;
+    }
+
+    ChartTrend.prototype.addPoint = function (x, y) {
+        var shift = this._series.data.length === this._trendPointMax;
+        this._emptyPoints = (y === null || isNaN(y)) ? (this._emptyPoints + 1) : 0;
+        y = parseInt(y) || 0;
+        this._series.addPoint([x, y], true, shift);
+    };
+    
+    ChartTrend.prototype.isEmpty = function () {
+        return this._emptyPoints >= this._trendPointMax;
+    };
+
     /**
      * @ngdoc function
      * @name chartsApp.directive:cdEventsLiveChart
@@ -22,6 +40,7 @@
             var timeoutPromise;
             var httpConfig;
             var retries = 0;
+            var trends = [];
 
             httpConfig = angular.extend({method:'GET'}, scope.$parent.$eval(attrs.cdEventsLiveChart));
 
@@ -30,7 +49,7 @@
             var SERVER_NUMBER_OF_RETRIES = 10;
             var CHART_TITLE = 'Events';
             var CHART_SERIES_COLOR = 'rgba(47, 177, 204, 0.5)';
-            var CHART_POINTS_MAX = 19; // max quantity of points on a chart
+            var TREND_POINTS_MAX = 19; // max quantity of points on a chart
 
             function doShiftChartElements (series) {
                 angular.forEach(series, function (trend) {
@@ -46,14 +65,7 @@
                 });
             }
 
-            function addPoint (point, series) {
-                if (series.data.length === CHART_POINTS_MAX) {
-                    series.data[0].remove(false, false);
-                }
-                series.addPoint(point);
-            }
-
-            function getMissingTrends (series, data) {
+            function getMissingTrendNames (series, data) {
                 var a = _.keys(data);
                 var b = _.pluck(series, 'name');
                 return _.difference(a, b);
@@ -74,43 +86,44 @@
                         retries = 0;
                         // Detect new trends
                         var x = (new Date()).getTime();
-                        var missingTrends = getMissingTrends(series, data);
+                        // Gets list of events which have no trend yet
+                        var missingTrendNames = getMissingTrendNames(series, data);
                         var empty = [];
                         // 
-                        doShiftChartElements(series);
+                        // doShiftChartElements(series);
                         // Adding new values to existing trends
-                        angular.forEach(series, function (trend) {
+                        angular.forEach(trends, function (trend) {
                             // Number of events
                             var value = data[trend.name];
-                            if (_.isUndefined(value)) { 
-                                // If trend has no data remove it
-                                if (trend.data.length === 0 ) { empty.push(trend); }
-                                return;
-                            }
-                            // Current time
-                            addPoint([x, value], trend);
+                            trend.addPoint(x, value);
+                            // Mark trend as a removed if it's empty
+                            if (trend.isEmpty()) { empty.push(trend); }
                         });
 
-                        // Remove empty trends
-                        angular.forEach(empty, function (trend) { trend.remove(); });
-
-                        angular.forEach(missingTrends, function (trendName) {
+                        // Creates missing trends
+                        angular.forEach(missingTrendNames, function (trendName) {
                             // Adding new triend to a chart
-                            var trend = control.addSeries({ name: trendName });
-                            var value = parseInt(data[trendName]) || 0;
-                            addPoint([x, value], trend);
+                            var series = control.addSeries({ name: trendName });
+                            var trend = new ChartTrend(series, TREND_POINTS_MAX);
+                            trend.addPoint(x, parseInt(data[trendName]) || 0);
+                            trends.push(trend);
+                            // addPoint([x, value], trend);
                         });
-                        // userNum = parseInt(userNum) || 0;
-                        // // reset number of retries
-                        // retries = 0;
-                        // doShiftChartElements(series);
-                        // addPoint([x, y], series);
+                        
+                        // Remove empty trends
+                        angular.forEach(empty, function (trend) {
+                            var idx = trends.indexOf(trend);
+                            trends.splice(idx, 1);
+                            trend._series.remove();
+                            trend = null;
+                        });
+                        empty.splice(0, empty.length);
                         timeoutPromise = $timeout(getData, SERVER_INTERVAL_MS);
                     }, function () {
                         if (retries === SERVER_NUMBER_OF_RETRIES) { return; }
                         retries += 1;
                         timeoutPromise = $timeout(getData, SERVER_INTERVAL_MS);
-                        console.error('server issue');
+                        console.error('Chart "%s" has a server issue', CHART_TITLE);
                     });
                 }
 
@@ -133,7 +146,7 @@
                     area: {
                         animation:false,
                         stacking: 'normal',
-                        lineWidth: 1
+                        lineWidth: 0
                     },
                     series: {
                         marker: {

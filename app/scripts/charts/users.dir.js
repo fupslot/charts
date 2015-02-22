@@ -76,7 +76,7 @@
                         if (retries === SERVER_NUMBER_OF_RETRIES) { return; }
                         retries += 1;
                         timeoutPromise = $timeout(getData, SERVER_INTERVAL_MS);
-                        // console.error('server issue');
+                        console.error('Chart "%s" has a server issue', CHART_TITLE);
                     });
                 }
 
@@ -96,7 +96,7 @@
                     }
                 },
                 plotOptions: {
-                    area: {
+                    line: {
                         lineWidth: 1
                     },
                     series: {
